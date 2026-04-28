@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>School Interface | Clubs & Schedules</title>
+    <style>
+        :root {
+            --primary-red: #ff0000;
+            --bg-black: #050505;
+            --sidebar-bg: #0a0a0a;
+            --science: #00f2ff;
+            --humanities: #ff0055;
+            --admin: #ff8800;
+            --sports: #00ff66;
+            --club-gold: #ffcc00; /* New color for clubs */
+        }
+
+        body {
+            background-color: var(--bg-black);
+            color: white;
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            color: var(--primary-red);
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            margin: 15px 0;
+            text-shadow: 0 0 10px var(--primary-red);
+        }
+
+        .main-wrapper {
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            align-items: flex-start;
+        }
+
+        /* Sidebar & Schedule Styling */
+        .sidebar {
+            width: 280px;
+            background: var(--sidebar-bg);
+            border: 1px solid #333;
+            height: 700px;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+        }
+
+        .sidebar h2 {
+            font-size: 18px;
+            color: var(--primary-red);
+            border-bottom: 1px solid var(--primary-red);
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+
+        #schedule-list {
+            list-style: none;
+            padding: 0;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        .schedule-item {
+            background: #151515;
+            border-left: 3px solid var(--primary-red);
+            margin-bottom: 8px;
+            padding: 10px;
+            font-size: 12px;
+            animation: slideIn 0.3s ease-out;
+            position: relative;
+        }
+
+        /* Club Badge */
+        .club-tag {
+            display: inline-block;
+            background: var(--club-gold);
+            color: black;
+            font-size: 9px;
+            font-weight: bold;
+            padding: 2px 5px;
+            margin-top: 5px;
+            border-radius: 2px;
+            text-transform: uppercase;
+        }
+
+        .remove-item {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            cursor: pointer;
+            color: #444;
+        }
+        .remove-item:hover { color: var(--primary-red); }
+
+        /* Map UI */
+        .map-viewport {
+            position: relative;
+            width: 850px;
+            height: 550px;
+            background-color: #0a0a0a;
+            border: 2px solid #222;
+            overflow: hidden;
+        }
+
+        .nav-container { margin-bottom: 15px; display: flex; gap: 10px; }
+        .floor-btn { background: transparent; color: var(--primary-red); border: 1px solid var(--primary-red); padding: 8px 15px; cursor: pointer; text-transform: uppercase;}
+        .floor-btn.active { background: var(--primary-red); color: black; }
+
+        .floor-layer { display: none; position: absolute; width: 100%; height: 100%; }
+        .floor-layer.active { display: block; }
+
+        /* Room Styling */
+        .room {
+            position: absolute;
+            border: 1px solid white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            cursor: cell;
+            transition: 0.2s;
+            text-align: center;
+        }
+
+        .room:hover { filter: brightness(1.3); box-shadow: 0 0 15px currentColor; }
+        
+        /* Club Indicator on Map */
+        .room.has-club::after {
+            content: '★';
+            position: absolute;
+            top: 2px;
+            right: 5px;
+            color: var(--club-gold);
+            font-size: 14px;
+        }
+
+        .type-science { background: rgba(0, 242, 255, 0.1); border-color: var(--science); color: var(--science); }
+        .type-humanities { background: rgba(255, 0, 85, 0.1); border-color: var(--humanities); color: var(--humanities); }
+        .type-sports { background: rgba(0, 255, 102, 0.1); border-color: var(--sports); color: var(--sports); }
+        .type-admin { background: rgba(255, 136, 0, 0.1); border-color: var(--admin); color: var(--admin); }
+        .type-hallway { background: rgba(255,255,255,0.05); border: 1px dashed #444; color: #444; pointer-events: none;}
+
+        .room-name { display: none; position: absolute; top: -30px; background: white; color: black; padding: 2px 8px; font-weight: bold; z-index: 100; white-space: nowrap; }
+        .room:hover .room-name { display: block; }
+
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+
+        
+    </style>
+</head>
+<body>
+    <div id="screen-glitch"></div>
+
+    <audio id="floor-sound" src="camera.mp3"></audio>
+    <h1>Facility Interface</h1>
+
+    <div class="nav-container">
+        <button class="floor-btn active" onclick="showFloor(1)">Floor 1</button>
+        <button class="floor-btn" onclick="showFloor(2)">Floor 2</button>
+        <button class="floor-btn" onclick="showFloor(3)">Floor 3</button>
+        <button class="floor-btn" onclick="showFloor(4)">Floor 4</button>
+    </div>
+
+    <div class="main-wrapper">
+        <div class="sidebar">
+            <h2>Schedule & Clubs</h2>
+            <ul id="schedule-list"></ul>
+            <button style="background:none; border:1px solid #444; color:#666; padding:5px; cursor:pointer;" onclick="document.getElementById('schedule-list').innerHTML=''">RESET ALL</button>
+            <button class="nav-reset-btn" onclick="resetNavigation()">CLEAR PATH</button>
+            <div class="instructions">
+                <h3>OPERATIONAL GUIDE</h3>
+                <ul>
+                    <li><span class="step">1</span> Click a room to set <strong>START</strong>.</li>
+                    <li><span class="step">2</span> Click another to set <strong>DESTINATION</strong>.</li>
+                    <li><span class="step">3</span> Path follows hallways & stairs automatically.</li>
+                    <li><span class="step">4</span> Switch floors to track multi-level routes.</li>
+                </ul>
+            </div>
+            
+            <div class="cat-container" onclick="playPillsSound()">
+                <div class="cat-label">SYSTEM_DISTRACTION_V1.0 (CLICK FOR PILLS)</div>
+                <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3ZleHpsZXpndnBieXJicXNidXp6eXh6eXh6eXh6eXh6eXh6eXh6JmVwPXYxX2ludGVybmFsX2dpZl9ieV9pZCZjdD1n/JIX9t2j0ZTN9S/giphy.gif"alt="Funny Cat">
+                <audio id="pills-audio" src="louis-pills-here.mp3"></audio>
+            </div>
+            <style>
+                .nav-reset-btn {
+                    background: none;
+                    border: 1px solid var(--science);
+                    color: var(--science);
+                    padding: 5px;
+                    cursor: pointer;
+                    margin-bottom: 10px;
+                    text-transform: uppercase;
+                    font-size: 10px;
+                    transition: 0.3s;
+                }
+                .nav-reset-btn:hover {
+                    background: rgba(0, 242, 255, 0.2);
+                    box-shadow: 0 0 10px var(--science);
+                }
+
+                /* Instructions Styling */
+.instructions {
+    margin-top: 20px;
+    padding: 10px;
+    border: 1px dashed #333;
+    font-size: 11px;
+}
+
+.instructions h3 {
+    font-size: 12px;
+    color: var(--primary-red);
+    margin-top: 0;
+}
+
+.instructions ul {
+    list-style: none;
+    padding: 0;
+}
+
+.instructions li {
+    margin-bottom: 8px;
+    color: #bbb;
+}
+
+.step {
+    color: var(--primary-red);
+    font-weight: bold;
+    margin-right: 5px;
+    border: 1px solid var(--primary-red);
+    padding: 0 4px;
+}
+
+/* Cat Gif Styling */
+.cat-container {
+    margin-top: auto; /* Pushes to bottom of sidebar */
+    border: 1px solid #222;
+    background: #000;
+    padding: 5px;
+    text-align: center;
+}
+
+.cat-label {
+    font-size: 8px;
+    color: #444;
+    margin-bottom: 4px;
+    text-align: left;
+}
+
+.cat-container img {
+    max-width: 50%;
+    filter: grayscale(0.5) contrast(1.2); /* Makes it fit the dark theme better */
+    border: 1px solid #111;
+}
+            </style>
+        
+        </div>
+
+        <div class="map-viewport">
+            <svg id="nav-overlay" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:10;">
+                <polyline id="nav-polyline" points="" 
+                    style="fill:none; stroke:var(--science); stroke-width:3; stroke-dasharray: 8; stroke-linejoin: round; animation: dash 1s linear infinite; opacity:0;" />
+            </svg>
+            <style>
+            @keyframes dash {
+              to { stroke-dashoffset: -16; }
+            }
+            </style>
+            <div id="floor1" class="floor-layer active">
+                <div class="room type-hallway" style="width: 750px; height: 30px; top: 260px; left: 50px;"></div>
+                
+                <div class="room type-humanities has-club" style="width: 160px; height: 180px; top: 70px; left: 50px;" 
+                     onclick="addToSchedule('Biology Lab', 'F1', 'Coding Club')">
+                    <span class="room-name">Biology Lab</span>BIO
+                </div>
+                
+                <div class="room type-humanities" style="width: 160px; height: 180px; top: 70px; left: 230px;" 
+                     onclick="addToSchedule('Chemistry Lab', 'F1', null)">
+            
+                </div>
+            </div>
+
+            <div id="floor2" class="floor-layer">
+                <div class="room type-hallway" style="width: 750px; height: 30px; top: 260px; left: 50px;"></div>
+                
+                <div class="room type-science has-club" style="width: 160px; height: 180px; top: 70px; left: 50px;" 
+                     onclick="addToSchedule('Web Design Rm 237', 'F2', 'Coding Club')">
+                     <span class="Web Design">
+                        Web Design<br>
+                        <button onclick="setPoint('start', this.parentElement.parentElement, 'Web')">START</button>
+                        <button onclick="setPoint('end', this.parentElement.parentElement, 'Web')">END</button>
+                    </span> WEB
+                </div>
+
+                   
+                <div class="room type-science has-club" style="width: 160px; height: 180px; top: 70px; right: 50px;" 
+                     onclick="addToSchedule('Band Rm 237', 'F2', 'Band Club')">
+                     <span class="Band">
+                        Band<br>
+                        <button onclick="setPoint('start', this.parentElement.parentElement, 'Band')">START</button>
+                        <button onclick="setPoint('end', this.parentElement.parentElement, 'Band')">END</button>
+                    </span>Band
+                </div>
+                
+                <div class="room type-util" style="width: 60px; height: 80px; top: 170px; left: 230px;" >
+                    <span class="room-name">Rm 238</span>238
+                </div>
+                <div class="room type-science" style="width: 80px; height: 140px; top: 110px; left: 300px;" 
+                onclick="addToSchedule('Video Rm 238', 'F2', null)">
+                <span class="Video">
+                    Video Production<br>
+                    <button onclick="setPoint('start', this.parentElement.parentElement, 'Vid')">START</button>
+                    <button onclick="setPoint('end', this.parentElement.parentElement, 'Vid')">END</button>
+                </span> VIDEO
+           </div>
+
+                <div class="room type-science  has-club" style="width: 60px; height: 140px; top: 110px; left: 380px;" 
+                onclick="addToSchedule('Graphic Design Rm 238', 'F2', 'Graphic Club')">
+                <span class="Graphic">
+                   Graphic<br>
+                    <button onclick="setPoint('start', this.parentElement.parentElement, 'Gra')">START</button>
+                    <button onclick="setPoint('end', this.parentElement.parentElement, 'Gra')">END</button>
+                </span> GD
+           </div>
+
+           <div class="room type-science" style="width: 60px; height: 140px; top: 110px; left: 450px;" 
+                onclick="addToSchedule('Graphic Design Rm 238', 'F2', null)">
+               <span class="room-name">Spanish Rm 238</span>Span
+           </div>
+
+
+           <div class="room type-science has-club" style="width: 100px; height: 140px; top: 110px; left: 520px;" 
+                onclick="addToSchedule('Art Rm 238', 'F2', 'art club')">
+               <span class="room-name">Art Rm 238</span>Art
+           </div>
+
+                <div class="room type-util" style="width: 100px; height: 100px; top: 310px; left: 50px;"><span class="room-name">Stairs</span>STR</div>
+                <div class="room type-util" style="width: 100px; height: 100px; top: 310px; right: 50px;"><span class="room-name">Stairs</span>STR</div>
+                <div class="room type-util" style="width: 120px; height: 100px; top: 310px; right: 290px;"><span class="room-name">Stairs</span>STR</div>
+               
+                <div class="room type-science " style="width: 60px; height: 140px; top: 310px; left: 570px;" 
+                onclick="addToSchedule('Ela Rm 238', 'F2', null)">
+                <span class="ELA">
+                    ELA<br>
+                    <button onclick="setPoint('start', this.parentElement.parentElement, 'ELA')">START</button>
+                    <button onclick="setPoint('end', this.parentElement.parentElement, 'ELA')">END</button>
+                </span>ELA
+           </div>
+
+           <div class="room type-science " style="width: 60px; height: 70px; top: 310px; left: 633px;" 
+           onclick="addToSchedule('Rm 238', 'F2', null)">
+          <span class="room-name">Rm 238</span>Rm
+      </div>
+
+      <div class="room type-science " style="width: 80px; height: 70px; top: 310px; left: 160px;" 
+      onclick="addToSchedule('Muzafar', 'F2', null)">
+      <span class="ELA">
+        Muzafar<br>
+        <button onclick="setPoint('start', this.parentElement.parentElement, 'ELA')">START</button>
+        <button onclick="setPoint('end', this.parentElement.parentElement, 'ELA')">END</button>
+    </span>Muzafar
+ </div>
+
+ <div class="room type-science " style="width: 80px; height: 70px; top: 310px; left: 240px;" 
+      onclick="addToSchedule('Rm 238', 'F2', null)">
+     <span class="room-name">Rm 238</span>Rm
+ </div>
+
+ <div class="room type-science has-club " style="width: 100px; height: 70px; top: 310px; left: 330px;" 
+      onclick="addToSchedule('Rm 238', 'F2', 'HNS')">
+     <span class="room-name">Rm 238</span>Rm
+ </div>
+
+            </div>
+
+            <div id="floor3" class="floor-layer">
+                <div class="room type-sports has-club" style="width: 400px; height: 300px; top: 125px; left: 225px;" 
+                     onclick="addToSchedule('Main Gymnasium', 'F3', 'Basketball Varsity')">
+                    <span class="room-name">Gymnasium</span>GYM
+                </div>
+            </div>
+
+            <div id="floor4" class="floor-layer">
+                <div class="room type-admin" style="width: 250px; height: 150px; top: 200px; left: 300px;" 
+                     onclick="addToSchedule('Student Council', 'F4', 'Admin Meeting')">
+                    <span class="room-name">Council Room</span>ADMIN
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+  function showFloor(floorNum) {
+    // 1. Play Industrial Sound
+    const sound = document.getElementById('floor-sound');
+    if (sound) {
+        sound.currentTime = 0; // Restart if already playing
+        sound.volume = 0.3;    // Set a comfortable volume
+        sound.play().catch(e => console.log("Audio play blocked until user interacts with page."));
+    }
+
+    // 2. Perform the floor switch
+    // Hide all layers and deactivate all buttons
+    document.querySelectorAll('.floor-layer').forEach(f => f.classList.remove('active'));
+    document.querySelectorAll('.floor-btn').forEach(b => b.classList.remove('active'));
+    
+    // Show selected floor
+    const targetFloor = document.getElementById('floor' + floorNum);
+    if (targetFloor) targetFloor.classList.add('active');
+    
+    // Highlight the correct button
+    const buttons = document.querySelectorAll('.floor-btn');
+    if (buttons[floorNum - 1]) {
+        buttons[floorNum - 1].classList.add('active');
+    }
+
+    // 3. Update the navigation path for the new floor view
+    if (startPoint && endPoint) {
+        drawPath();
+    }
+}
+
+function addToSchedule(roomName, floor, clubName) {
+    const list = document.getElementById('schedule-list');
+    
+    // Create element
+    const li = document.createElement('li');
+    li.className = 'schedule-item';
+    
+    // Using textContent for the room name is safer, but innerHTML works for your design
+    li.innerHTML = `
+        <span class="remove-item" onclick="this.parentElement.remove()">×</span>
+        <strong>${roomName}</strong><br>
+        <small>Location: ${floor}</small>
+        ${clubName ? `<div class="club-tag">★ ${clubName}</div>` : ''}
+    `;
+    
+    list.appendChild(li);
+    
+    // Auto-scroll to the bottom of the list
+    list.scrollTop = list.scrollHeight;
+}
+let startPoint = null;
+let endPoint = null;
+
+function setPoint(type, element, roomName) {
+    // Get center of the clicked room
+    const rect = element.getBoundingClientRect();
+    const viewport = document.querySelector('.map-viewport').getBoundingClientRect();
+    
+    const x = element.offsetLeft + (element.offsetWidth / 2);
+    const y = element.offsetTop + (element.offsetHeight / 2);
+
+    if (type === 'start') {
+        startPoint = { x, y, name: roomName };
+        console.log("Start set at:", roomName);
+    } else {
+        endPoint = { x, y, name: roomName };
+        console.log("End set at:", roomName);
+    }
+
+    drawPath();
+}
+const hallwayY = 275; // The vertical center of your hallway (260px top + 15px half-height)
+
+function drawPath() {
+    const line = document.getElementById('nav-path');
+    const path = document.getElementById('nav-polyline'); // We'll use a polyline for multiple segments
+    
+    if (startPoint && endPoint) {
+        // We create 4 points: 
+        // 1. Start Room center
+        // 2. Hallway point directly above/below Start Room
+        // 3. Hallway point directly above/below End Room
+        // 4. End Room center
+        const points = `
+            ${startPoint.x},${startPoint.y} 
+            ${startPoint.x},${hallwayY} 
+            ${endPoint.x},${hallwayY} 
+            ${endPoint.x},${endPoint.y}
+        `;
+        
+        path.setAttribute('points', points);
+        path.style.opacity = "1";
+    }
+}
+function resetNavigation() {
+    // 1. Reset the logic variables
+    startPoint = null;
+    endPoint = null;
+
+    // 2. Hide the polyline and clear its points
+    const path = document.getElementById('nav-polyline');
+    if (path) {
+        path.style.opacity = "0";
+        path.setAttribute('points', '');
+    }
+    
+    console.log("Navigation path cleared.");
+
+}
+
+function playPillsSound() {
+    const audio = document.getElementById('pills-audio');
+    const catImg = document.querySelector('.cat-container img');
+
+    // Reset audio to start (in case of spamming) and play
+    audio.currentTime = 0;
+    audio.play();
+
+    // Add a visual "hit" effect
+    catImg.style.transform = "scale(0.95) rotate(5deg)";
+    catImg.style.filter = "invert(1) sepia(1) saturate(5) hue-rotate(300deg)"; // "Glitch" effect
+    
+    setTimeout(() => {
+        catImg.style.transform = "scale(1) rotate(0deg)";
+        catImg.style.filter = "grayscale(0.5) contrast(1.2)"; // Return to theme
+    }, 150);
+}
+    </script>
+</body>
+</html>
